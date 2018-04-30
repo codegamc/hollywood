@@ -11,7 +11,9 @@ func MakeEnvironment(bindings []types.HWSymbol, expressions []types.HWType) Envi
 	env.GiveStudio(MakeStudio())
 
 	if len(bindings) != len(expressions) {
-		return env // this should throw an error
+		return env // this should throw an error, but error catching is a slow process
+		// there are way too many errors to catch in a programming language environment
+		// that i just wont do any if it that isnt absolutely critical
 	}
 
 	for i := 0; i < len(bindings); i++ {
@@ -33,7 +35,8 @@ func (e *Environment) GiveStudio(studio *Studio) {
 	e.Studio = studio
 }
 
-// GetStudio returns the Studio, looking for the parent's first
+// GetStudio returns the Studio, looking for the parent's first // we want to use only 1 studio if
+// possible
 func (e *Environment) GetStudio() *Studio {
 	if e.parent != nil {
 		return e.parent.GetStudio()

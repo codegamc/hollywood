@@ -2,6 +2,17 @@ package hollywood
 
 import "strconv"
 
+/*
+
+NOTE: not all of the types defined here are implementd
+
+Some where made with ambition intentions, or with the intentions of creating a clear scope for the
+remaining types, so show the bounds of what is used
+
+All of the types defined in the Const block are the types that are used in the code
+
+*/
+
 // Function is a definition of "Functions"
 type Function func([]HWType) HWType
 
@@ -22,7 +33,7 @@ const (
 	// INT_TYPE represents
 	INT_TYPE = iota
 	// CHAR_TYPE
-	CHAR_TYPE = iota
+	//CHAR_TYPE = iota
 	// FUNC_TYPE represents
 	FUNC_TYPE = iota
 	// NULL_TYPE represents
