@@ -10,22 +10,14 @@ import (
 
 // imports the core functions into the environment (work in progress)
 func importCore(envi *environment.Environment) *environment.Environment {
-
-	//
-	//list := types.MakeSymbol("core/list")
-	// Checks if the next object is a list
-	//listy := types.MakeSymbol("core/list?")
-	// Checks if the next object is an empty list
-	//empty := types.MakeSymbol("core/empty?")
-	// Counts how many items are in the list
-	//count := types.MakeSymbol("core/count")
-
 	// Prints a symbol in "pretty text"
-	envi.Bind(types.MakeSymbol("core/print"), types.MakeFunc(print, "print"))
+	envi.Bind(types.MakeSymbol("core/print"), types.MakeFunc(print, "core/print"))
 	// Creates a list
-	envi.Bind(types.MakeSymbol("core/list"), types.MakeFunc(list, "list"))
+	envi.Bind(types.MakeSymbol("core/list"), types.MakeFunc(list, "core/list"))
 	// returns true if a list
-	envi.Bind(types.MakeSymbol("core/list?"), types.MakeFunc(listq, "list?"))
+	envi.Bind(types.MakeSymbol("core/list?"), types.MakeFunc(listq, "core/list?"))
+	// return the length of a list
+	envi.Bind(types.MakeSymbol("core/count"), types.MakeFunc(count, "core/count"))
 
 	return envi
 }
@@ -45,4 +37,12 @@ func listq(args []types.HWType) types.HWType {
 		return types.MakeBool(true)
 	}
 	return types.MakeBool(false)
+}
+
+func count(args []types.HWType) types.HWType {
+	if args[0].GetType() == types.LIST_TYPE {
+		count := len(args[0].(types.HWList).Val)
+		return types.MakeInt(int64(count))
+	}
+	return types.MakeInt(int64(-1))
 }

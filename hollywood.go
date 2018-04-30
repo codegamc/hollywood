@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"time"
 
 	// Note: `codegamc` is me, as this is code written for the project
 	// also, this is actually the import path. In golang, if the import path
@@ -19,29 +20,38 @@ import (
 )
 
 /*
-
 Some structural information:
 
 The interpreter is written as a "Read Evaluate Print" loop
 
-The reader (parsing) is in the "reader" package. It is a simple REGEX based LISP parser.  The regex breaks up the input string into tokens,
-and then parses those tokens into an Abstract Syntax Tree
+The reader (parsing) is in the "reader" package. It is a simple REGEX based LISP parser.
+The regex breaks up the input string into tokens, and then parses those tokens into an
+Abstract Syntax Tree
 
-The "Eval" (interpreting) is in the main package, but could be moved in the future.  The scope portion of the interpreting is in the
-Environmental package.  The stdlib functions are in the stdlib package (printing, equality, etc). The determining factor for is something
-should be in the Eval or Stdlib is "Should this be considered a reserved word", and if it is a reserved word, it goes in the eval switch
-statement instead of in the standard library of functions
+The "Eval" (interpreting) is in the main package, but could be moved in the future.  The
+scope portion of the interpreting is in the Environmental package.  The stdlib functions
+are in the stdlib package (printing, equality, etc). The determining factor for is something
+should be in the Eval or Stdlib is "Should this be considered a reserved word", and if it is
+a reserved word, it goes in the eval switch statement instead of in the standard library of
+functions.
 
-The "Print" (printing) is in the "printer" package, but it is very small for now.  It would get more complicated should a "pretty printing"
-be implemented, where formatting is applied to the string as it gets printed.
+The "Print" (printing) is in the "printer" package, but it is very small for now.  It would
+get more complicated should a "pretty printing" be implemented, where formatting is applied
+to the string as it gets printed.  This is not an issue as long as strings are not fully
+implemented into the type system (they are, but there is nothing special about them) eg. no
+escape characters, etc
 */
 
 // This is the entrypoint into the code
 func main() {
 
+	// create a new environment, its the root envi.
 	envi := environment.MakeEnvironment(nil, nil)
+	// set it as the base, this means that it will do things to it like
+	// set the standard library into the namespace
 	envi = setBaseEnv(envi)
 
+	// create the CLI reader
 	commandLineReader := bufio.NewReader(os.Stdin)
 	// execute infinitely...
 	for {
@@ -70,18 +80,25 @@ func READ(str string) types.HWType {
 // making certain evaluations in the function
 func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 
+	// if its not a list, then you cannot evaluate the expression as a function
+	// so send it to EvaluateAST
 	if ast.GetType() != types.LIST_TYPE {
 		return evaluateAST(ast, envi)
 	}
-	// ast is a list:
+	// ast is a list: // this will never be done, its not worth the work
+	// the parser just crashes at list-length = 0
 	// if empty: return
 
-	//else:
+	//else, evaluate the list assuming the first word is either
+	// 	(1. a control word (see switch statement))
+	//		 so handle accordingly
+	// 	(2. a function (stores as a symbol))
+	//		 so call it on the rest of the list as args
 	if ast.(types.HWList).Val[0].GetType() == types.SYM_TYPE {
 		sym := ast.(types.HWList).Val[0].(types.HWSymbol)
 		switch sym.Val {
-		//its a define statement that ads a value to the env.
-		case "def!":
+		//its a define statement that adds a value to the env.
+		case "var":
 			key := ast.(types.HWList).Val[1].(types.HWSymbol)
 			value := EVAL(ast.(types.HWList).Val[2], envi)
 			val := envi.Bind(key, value)
@@ -109,6 +126,7 @@ func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 			val := EVAL(evalTerm, &newEnvi)
 			return val
 		// it is an iterative do statement
+		// (do (eval_1) (eval_2) ... (eval_n) (eval_final)) => returns the result of eval_final
 		case "do":
 			// this should evaluate each element in the list, return final element
 			length := len(ast.(types.HWList).Val)
@@ -122,9 +140,12 @@ func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 			return EVAL(ast.(types.HWList).Val[length-1], envi)
 
 		// it is an if statement
+		// ( if (condition) (eval_this) (else_eval_this) )
+		// this uses the types.NotFalsey method, which is probably not robust
 		case "if":
 			cond := EVAL(ast.(types.HWList).Val[1], envi)
 			// CONDITION MET
+
 			if types.NotFalsey(cond) {
 				return EVAL(ast.(types.HWList).Val[2], envi)
 			}
@@ -132,36 +153,43 @@ func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 			if len(ast.(types.HWList).Val) > 3 {
 				return EVAL(ast.(types.HWList).Val[3], envi)
 			}
-			// no else statement
+
+			// no else statement, return explicit null
 			return types.MakeNull()
 		// it is a lambda function
+		// (	(fn* (args_symbols) (eval_this) ) _args_ )
+		// it generates an anonymous function, that has no symbol and does not bind to the environment
+		// it does however, have a generated parent environment, so as it gets passed around, it holds
+		// a constant environment parent
 		case "fn*":
-
-			//(  (fn* (args_symbol) (eval_this) )  _args_  )
 			argsSymList := ast.(types.HWList).Val[1].(types.HWList)
 			argsSym := []types.HWSymbol{}
+			// generating the list of symbols
 			for i := 0; i < len(argsSymList.Val); i++ {
 				if argsSymList.Val[i].GetType() == types.SYM_TYPE {
 					argsSym = append(argsSym, argsSymList.Val[i].(types.HWSymbol))
 				}
 			}
+			// evaluation AST
 			evalThis := ast.(types.HWList).Val[2]
 
+			// generated HWFunction
 			f := types.MakeFunc(func(args []types.HWType) types.HWType {
 				newEnvi := environment.MakeEnvironment(argsSym, args)
 				newEnvi = *(&newEnvi).BindParent(envi)
-				printer.PrintStr(evalThis)
 				return evaluateAST(evalThis, &newEnvi)
 			}, "__anon__")
 
 			return f
-			// (defun symbol (LIST_ARGS_SYMBOLS) (EVAL_THIS))
-		// explicitly defining a function, that has an arg list
-		case "defun":
-			// ast.().Val[0] == "defun"
+		// (func symbol_to_represent_function (LIST_ARGS_SYMBOLS) (EVAL_THIS))
+		// explicitly defining a function, that has an args list
+		case "func":
+			// ast.().Val[0] == "func"
 			symbol := ast.(types.HWList).Val[1].(types.HWSymbol)
 			argsSymList := ast.(types.HWList).Val[2].(types.HWList)
 
+			// for each symbol in the args list, ensure that it is a symbol, and add it to
+			// the args being passed into the function
 			argsSym := []types.HWSymbol{}
 			for i := 0; i < len(argsSymList.Val); i++ {
 				if argsSymList.Val[i].GetType() == types.SYM_TYPE {
@@ -169,30 +197,37 @@ func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 				}
 			}
 
+			// the AST being evaluated when the function is run
 			evalThis := ast.(types.HWList).Val[3]
 
+			// this is the HWFunction that gets run when the function is run
 			f := types.MakeFunc(func(args []types.HWType) types.HWType {
 				newEnvi := environment.MakeEnvironment(argsSym, args)
 				newEnvi = *(&newEnvi).BindParent(envi)
-
-				//printer.PrintStr(evalThis)
-				//fmt.Println("Type: " + evalThis.(types.HWList).Val[0].GetMeta())
 				return EVAL(evalThis, &newEnvi)
 			}, symbol.Val)
 
+			// binding the function to the environment
 			envi.Bind(symbol, f)
 
+			// returning the function
 			return f
 		// maps a function to act on each item in a list
 		// (map myFunction myList)
-		// 		=> returns a list of results
+		// 		=> returns a list of results, which is each item in myList,
+		//			 being input to myFunction
 		case "map":
+
+			start := time.Now()
 			// its another symbol
 			//map := ast.(types.HWList).Val[0] // the map symbol
 			function := ast.(types.HWList).Val[1]
 			sequence := ast.(types.HWList).Val[2]
 
 			// This is more parallelism than concurrency... oh well
+			// take each item in the sequence, and make a goroutine to handle that item
+			// make a channel to allow that item to return data when its done
+			// then run the goroutines
 			length := len(sequence.(types.HWList).Val)
 			returnDataChannels := make([](chan types.HWType), length)
 			for i := 0; i < length; i++ {
@@ -200,6 +235,9 @@ func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 				c := make(chan types.HWType)
 				returnDataChannels[i] = c
 				go func(c chan types.HWType, sequenceElement types.HWType) {
+					//
+					//fmt.Println("This is a mapped function running in its own thread")
+
 					// take function, and call it on the correct part of the sequence
 					f := envi.Get(function.(types.HWSymbol))
 					args := make([]types.HWType, 1)
@@ -208,16 +246,47 @@ func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 				}(c, sequence.(types.HWList).Val[i])
 			}
 
+			// create an array to store the return data, and collect it from the channels
+			// note that it blocks on sequence(id: i), so if a channel has no data, it will wait.
+			// maybe there should be a timeout or something, since a malformed input can lead to
+			// no output ever, and it holds up everything
 			returnData := make([]types.HWType, length)
 			for i := 0; i < length; i++ {
 				returnData[i] = <-returnDataChannels[i]
 			}
 
+			t := time.Now()
+			elapsed := t.Sub(start)
+			fmt.Println("The time that was taken to complete map in parallel is: " + elapsed.String())
+
 			return types.MakeList(returnData)
 
 			// spin up a channel to store the return values
 			// eval each item in a seperate gorouting
-			// collect the results, and store them as a
+			// collect the results, and store them
+
+		// This is a version of map that runs in serial, and does not take advantage of threads
+		case "s/map":
+			// its another symbol
+			//map := ast.(types.HWList).Val[0] // the map symbol
+			start := time.Now()
+			function := ast.(types.HWList).Val[1]
+			sequence := ast.(types.HWList).Val[2]
+			length := len(sequence.(types.HWList).Val)
+			f := envi.Get(function.(types.HWSymbol))
+			returnData := make([]types.HWType, length)
+
+			for i := 0; i < length; i++ {
+				sequenceElement := sequence.(types.HWList).Val[i]
+				args := make([]types.HWType, 1)
+				args[0] = sequenceElement
+				returnData[i] = f.(types.HWFunc).Val(args)
+			}
+
+			t := time.Now()
+			elapsed := t.Sub(start)
+			fmt.Println("The time that was taken to complete map in series is: " + elapsed.String())
+			return types.MakeList(returnData)
 
 		// its a while loop
 		// (while (condition) (eval_this_every_loop))
@@ -226,15 +295,18 @@ func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 			condition := ast.(types.HWList).Val[1]
 			loopBody := ast.(types.HWList).Val[2]
 
+			// evaluate the condition, if its false from the start, dont run it
 			cond := EVAL(condition, envi)
+			// repeatedly evaluate the loopbody while the condition is not false
 			for types.NotFalsey(cond) {
 				EVAL(loopBody, envi)
 				cond = EVAL(condition, envi)
 			}
+			// returns an implicit null (has no printed value)
 			return types.MakeNullImplicit()
 
 		// this is how true concurrency will be acheived here...
-		// ACT is the keyword for triggering the "actor model" style of concurrency
+		// act is the keyword for triggering the "green thread" goroutine
 		// an actor is an independant "thread" that has a "mailbox" that can receive messages,
 		// actors can also send messages
 		// (act myFunc args) => resolves to an int (thread-id)
@@ -243,31 +315,20 @@ func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 			function := ast.(types.HWList).Val[1]
 			args := ast.(types.HWList).Val[2]
 			// this environment is unique to the actor
+			// the actorGlobal is used to ensure that certain values can be set to the actor that
+			// cannot be over written (nothing implemented though)
 			actorGlobal := environment.MakeEnvironment(nil, nil)
-			//actorGlobal = setBaseEnv(actorGlobal)
 			actorEnvi := environment.MakeEnvironment(nil, nil)
 			actorEnvi.BindParent(&actorGlobal)
 			// it still has a common parent, since that actor might want to use globals (like the stdlib)
 			// the only risk here is that some action on the global level changes what actors see,
-			// but this a problem for the writers
+			// but this a problem for the writers of the code. It is a way to signal to actors to change
+			// some sort of behavior? it would be a "read only" communication from the actors perspective
 			actorEnvi = *(&actorEnvi).BindParent(envi)
-			// this is where the studio should generate an actor number, and add it to the actor's envi
-			actor := envi.GetStudio().NewActor()
-			actorEnvi.Bind(types.MakeSymbol("actor/id"), types.MakeInt(int64(actor.ActorID)))
-			actorEnvi.Bind(types.MakeSymbol("actor/mail"), types.MakeFunc(func(args []types.HWType) types.HWType {
-				// this is the get mail function
-				nextMail := actor.GetMail()
-				return nextMail
-			}, "actor/mail"))
 
-			// (actor/send (address message))
-			actorEnvi.Bind(types.MakeSymbol("actor/send"), types.MakeFunc(func(args []types.HWType) types.HWType {
-				address := args[0]
-				//message := args[1]
-				messageCouplet := args[0:2]
-				actor.SendMail(messageCouplet)
-				return address
-			}, "actor/send"))
+			// this is where the studio should generate an actor
+			// this does not actually do anything, but it could do stuff in the future
+			actor := envi.GetStudio().NewActor()
 
 			// this is where the new AST to be evaluated is created
 			actorASTlist := []types.HWType{}
@@ -279,10 +340,14 @@ func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 			// converting that into a hollywood type
 			actorAST := types.MakeList(actorASTlist)
 
-			// this is where the new corouting is created, and run
+			// this is where the new corouting is created, and run, its a non-blocking call
+			// that starts the "greenthread" or goroutine (coroutine) that is managed by the
+			// golang runtime.  This means that actors will be multiplexed across several of the
+			// operating system's threads, to ensure that nothing is blocking
 			go EVAL(actorAST, &actorEnvi)
 
 			// returning some value that represents the actor, so it can be used later
+			// currently, there is nothing that can be done with such an ID, but one day maybe
 			return types.MakeInt(actor.ActorID)
 
 		// its just a symbol
@@ -292,36 +357,36 @@ func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 			list := evaluateAST(ast, envi)
 			var result types.HWType
 			result = list.(types.HWList).Val[0]
-			fmt.Println(printer.PrintStr(result))
 
-			if result.GetType() == types.SYM_TYPE {
-				// this problem again...
-				fmt.Println(printer.PrintStr(envi.Get(result.(types.HWSymbol))))
-			}
-
+			// this breaks out the function from the rest of the AST
 			listFunction := result.(types.HWFunc).Val
-			//func_(list.(types.HWList).Val[1:])
+
+			// This breaks the args out of the AST and formats them as an array of inputs for
+			// functions, since that is the standard interface
 			args := []types.HWType{}
 			for i := 1; i < len(list.(types.HWList).Val); i++ {
 				args = append(args, list.(types.HWList).Val[i])
 			}
 
+			// calling the actual function
 			results := listFunction(args)
 			return results
 
 		}
 	}
+	//
 	return ast
 }
 
-// PRINT is the print func
+// PRINT is the print func for the REPL
 func PRINT(exp types.HWType) string {
 	return printer.PrintStr(exp)
 }
 
 //  This evaluates symbols in accordance with the environment
 func evaluateAST(ast types.HWType, envi *environment.Environment) types.HWType {
-	//fmt.Println(ast.ToString())
+	//this takes a symbol and resolves it based on the environment, so things defined as vars
+	// become their value at runtime
 	if ast.GetType() == types.SYM_TYPE {
 		// if found in env, return, else raise error
 		val := envi.Get(ast.(types.HWSymbol))
@@ -332,6 +397,8 @@ func evaluateAST(ast types.HWType, envi *environment.Environment) types.HWType {
 		return ast
 	}
 
+	// this takes a list, and evaluates each item in the list, in order to resolve that
+	// its how recursively defined expressions get handled
 	if ast.GetType() == types.LIST_TYPE {
 		// evaluate ast for each of the items in the list...
 		length := len(ast.(types.HWList).Val)
@@ -346,9 +413,8 @@ func evaluateAST(ast types.HWType, envi *environment.Environment) types.HWType {
 	return ast
 }
 
-// adds global stuff like stdlib to the base environment
+// adds global stuff like stdlib to the base environment (currently only stdlib)
 func setBaseEnv(envi environment.Environment) environment.Environment {
 	stdlib.ImportStdLib(envi)
-
 	return envi
 }
