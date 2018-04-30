@@ -260,8 +260,6 @@ func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 				return nextMail
 			}, "actor/mail"))
 
-			// this wont be here in the other git branch
-
 			// (actor/send (address message))
 			actorEnvi.Bind(types.MakeSymbol("actor/send"), types.MakeFunc(func(args []types.HWType) types.HWType {
 				address := args[0]
