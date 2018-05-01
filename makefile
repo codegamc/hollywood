@@ -1,8 +1,3 @@
-all:
-
-	make mac
-	make linux
-
 mac:
 	GOOS="darwin" GOARCH=amd64
 	go build hollywood.go
