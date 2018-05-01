@@ -104,28 +104,6 @@ func EVAL(ast types.HWType, envi *environment.Environment) types.HWType {
 			val := envi.Bind(key, value)
 			return val
 
-		//it is a namespace creation statement
-		case "let*":
-			newEnvi := environment.MakeEnvironment(nil, nil)
-			newEnvi = *(&newEnvi).BindParent(envi)
-			bindingList := ast.(types.HWList).Val[1]
-			if bindingList.GetType() == types.LIST_TYPE {
-				list := bindingList.(types.HWList)
-				// list is even length, so it is a set of pairs
-				if len(list.Val)%2 == 0 {
-					for i := 0; i < len(list.Val); i = i + 2 {
-						//ensuring that the key is a symbol
-						if list.Val[i].GetType() == types.SYM_TYPE {
-							newEnvi.Bind(list.Val[i].(types.HWSymbol), EVAL(list.Val[i+1], &newEnvi))
-						}
-					}
-				}
-			}
-
-			evalTerm := ast.(types.HWList).Val[2]
-			val := EVAL(evalTerm, &newEnvi)
-			return val
-		// it is an iterative do statement
 		// (do (eval_1) (eval_2) ... (eval_n) (eval_final)) => returns the result of eval_final
 		case "do":
 			// this should evaluate each element in the list, return final element
