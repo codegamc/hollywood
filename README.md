@@ -56,3 +56,66 @@ More complex expressions are also valid.
 You can define a function:
 * `(func square (a) (* a a))` Here we are defining the function square, which takes the argument `a` and returns the result of `a` multiplied by `a`.
 *  `(square 3)` => this returns Int: 6
+* You can combine these two steps together with a  `do` statement: `(do (func square (a) (* a a)) (square 3))`.  `do` statements take a list of expressions, evaluate them, and return the result of the last one.  The above expression returns Int: 9.
+* You can also use the `map` function to run this square function over several inputs:
+```lisp
+(do 
+   (func square (a) 
+     (* a a)) 
+   (map square (1 2 3 4 5 6 7 8 9))
+)
+```
+Since the interpreter cannot handle carriage returns:
+```lisp
+(do (func square (a) (* a a)) (map square (1 2 3 4 5 6 7 8 9)))
+```
+* You can also create loops:
+```lisp
+(do
+  (var a 0)
+  (while (< a 10)
+    (do 
+      (var a (+ a 1))
+      (core/print "A:")
+      (core/print a)
+    )
+  )
+)
+```
+This loop prints the value of a 10 times, as a is incremented from 0->10
+```lisp
+(do (var a 0) (while (< a 10) (do (var a (+ a 1)) (core/print "A:") (core/print a))))
+```
+    
+* You can write conditional if statements:
+```
+(do
+  (var a 5)
+  (if (< a 10) 
+    (core/print a)
+  )
+)
+(do (var a 5) (if (< a 10) (core/print a) ))
+(do
+  (var a 5)
+  (var b 10)
+  (if (< a 1) 
+    (core/print a)
+    (core/print b)
+  )
+)
+(do (var a 5) (var b 10) (if (< a 1) (core/print a) (core/print b) ))
+```
+* Lastly, you can make functions run concurrently to the REPL. This is hard to visualize, but it is possible using the `act` keyword.  Below, functions are defined that waste CPU by adding adding i, untill a large number (blocking), while another calls this function then prints an input aferwards. This function is run on a seperate actor, which returns the input (10 in this case). It takes ~ 4 seconds on my 2015 Macbook Pro. 
+```lisp
+(do 
+ (func sleep (_) (do (var a 0) (while (< a 1000000) (do (var a (+ a 1)))) ))
+ (func print-after-wait (val) (do (sleep 0) (core/print val)))
+ (act print-after-wait (10))
+ (core/print 1)
+)
+
+(do (func sleep (_) (do (var a 0) (while (< a 1000000) (do (var a (+ a 1)))) )) (func print-after-wait (val) (do (sleep 0) (core/print val))) (act print-after-wait (10)) (core/print 1) )
+```
+
+
