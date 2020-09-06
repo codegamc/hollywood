@@ -1,4 +1,4 @@
-# "Hollywood" By Michael Codega
+# "Hollywood"
 
  Hollywood is a simple lisp interpreter written in go. It is currently only functional as a REPL. Its name comes from the "Actor Model" of concurrency, which hollywood is loosely trying to implement.  The Actor Model is based on a 1978 paper by Tony Hoare, where he described "Communicating Sequential Processes".  Hollywood does not implement a communication method between the "Actors" or coroutines (yet).  
 
